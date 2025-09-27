@@ -9,9 +9,6 @@ from docx2pdf import convert
 from pdf2image import convert_from_path
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
-from io import BytesIO
-from realesrgan import RealESRGANer
-from basicsr.archs.rrdbnet_arch import RRDBNet
 
 app = Flask(__name__)
 bot = telebot.TeleBot("8201009198:AAGhsiDkPtAxcLmw1gIvbz7gnX9mFAeQudk")
@@ -27,43 +24,56 @@ def main_menu():
     markup.add(telebot.types.KeyboardButton("JPG to PDF"))
     return markup
 
+@app.route('/')
+def health_check():
+    print("Health check accessed")  # Debug log
+    return 'Bot is running', 200
+
 @bot.message_handler(commands=['start'])
 def start(message):
     chat_id = message.chat.id
     user_state[chat_id] = "MAIN_MENU"
     user_last_interaction[chat_id] = time.time()
-    bot.send_message(chat_id, "🌟 Hiii, cutie! I'm @genius_nobita_45, your file helper! 😘\nSelect a task:", reply_markup=main_menu())
+    print(f"Received /start from chat_id: {chat_id}")  # Debug log
+    try:
+        bot.send_message(chat_id, "🌟 Hiii, cutie! I'm @genius_nobita_45, your file helper! 😘\nSelect a task:", reply_markup=main_menu())
+    except Exception as e:
+        print(f"Error sending /start response to chat_id {chat_id}: {e}")
 
 @bot.message_handler(content_types=['text'])
 def debug_text(message):
     chat_id = message.chat.id
     user_last_interaction[chat_id] = time.time()
     text = message.text.lower()
-    bot.reply_to(message, f"Received: {message.text}\nState: {user_state.get(chat_id)}")
-    
-    if text == "pdf to word":
-        user_state[chat_id] = "PDF_TO_WORD"
-        bot.send_message(chat_id, "😉 Upload a PDF (<20 MB), sweetie! 💕")
-    elif text == "word to pdf":
-        user_state[chat_id] = "WORD_TO_PDF"
-        bot.send_message(chat_id, "😍 Send me a Word doc (.docx), darling! 💖")
-    elif text == "enhance image":
-        user_state[chat_id] = "ENHANCE_IMAGE"
-        bot.send_message(chat_id, "🥰 Upload a JPG or PNG to enhance, cutie! ✨")
-    elif text == "sign pdf":
-        user_state[chat_id] = "SIGN_PDF"
-        bot.send_message(chat_id, "😚 Upload a PDF to sign, love! ✍️")
-    elif text == "jpg to pdf":
-        user_state[chat_id] = "JPG_TO_PDF"
-        bot.send_message(chat_id, "🌸 Send JPGs one by one, then type 'Done' when ready, honey! 😊")
-    else:
-        bot.send_message(chat_id, "😜 Pick an option from the menu, cutie! 💞", reply_markup=main_menu())
+    print(f"Received text: {text}, chat_id: {chat_id}, state: {user_state.get(chat_id)}")  # Debug log
+    try:
+        bot.reply_to(message, f"Received: {message.text}\nState: {user_state.get(chat_id)}")
+        if text == "pdf to word":
+            user_state[chat_id] = "PDF_TO_WORD"
+            bot.send_message(chat_id, "😉 Upload a PDF (<20 MB), sweetie! 💕")
+        elif text == "word to pdf":
+            user_state[chat_id] = "WORD_TO_PDF"
+            bot.send_message(chat_id, "😍 Send me a Word doc (.docx), darling! 💖")
+        elif text == "enhance image":
+            user_state[chat_id] = "ENHANCE_IMAGE"
+            bot.send_message(chat_id, "🥰 Upload a JPG or PNG to enhance, cutie! ✨")
+        elif text == "sign pdf":
+            user_state[chat_id] = "SIGN_PDF"
+            bot.send_message(chat_id, "😚 Upload a PDF to sign, love! ✍️")
+        elif text == "jpg to pdf":
+            user_state[chat_id] = "JPG_TO_PDF"
+            bot.send_message(chat_id, "🌸 Send JPGs one by one, then type 'Done' when ready, honey! 😊")
+        else:
+            bot.send_message(chat_id, "😜 Pick an option from the menu, cutie! 💞", reply_markup=main_menu())
+    except Exception as e:
+        print(f"Error handling text message from chat_id {chat_id}: {e}")
 
 @bot.message_handler(content_types=['photo', 'document'], func=lambda m: user_state.get(m.chat.id) == "ENHANCE_IMAGE")
 def enhance_image(message):
     chat_id = message.chat.id
     user_last_interaction[chat_id] = time.time()
     file_name = None
+    print(f"Enhance image request from chat_id: {chat_id}")  # Debug log
     if message.content_type == 'photo':
         file_info = bot.get_file(message.photo[-1].file_id)
         file_name = 'temp.jpg'
@@ -78,31 +88,9 @@ def enhance_image(message):
             f.write(downloaded)
     else:
         bot.send_message(chat_id, "😉 Sweetie, I need a JPG or PNG! Try again! 💕", reply_markup=main_menu())
+        print(f"Invalid file type for enhance image, chat_id: {chat_id}")
         return
     try:
-        # Load Real-ESRGAN model
-        model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-        upsampler = RealESRGANer(
-            scale=4,
-            model_path='https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth',
-            model=model,
-            tile=0,
-            tile_pad=10,
-            pre_pad=0,
-            half=True
-        )
-        # Enhance image
-        img = Image.open(file_name).convert('RGB')
-        output, _ = upsampler.enhance(img, outscale=4)
-        enhanced_name = file_name.rsplit('.', 1)[0] + '_enhanced_ai.' + file_name.rsplit('.', 1)[1]
-        output.save(enhanced_name)
-        with open(enhanced_name, 'rb') as f:
-            bot.send_document(chat_id, f)
-        bot.send_message(chat_id, "✨ AI-enhanced! Super-resolution applied like Remini. What's next? 😘", reply_markup=main_menu())
-        os.remove(enhanced_name)
-    except Exception as e:
-        bot.send_message(chat_id, f"😢 AI enhancement failed: {e}. Using basic enhance! 💕", reply_markup=main_menu())
-        # Fallback to basic PIL
         img = Image.open(file_name)
         enhancer = ImageEnhance.Contrast(img)
         img = enhancer.enhance(1.5)
@@ -114,7 +102,11 @@ def enhance_image(message):
         img.save(enhanced_name)
         with open(enhanced_name, 'rb') as f:
             bot.send_document(chat_id, f)
+        bot.send_message(chat_id, "✨ Enhanced your image, cutie! What's next? 😘", reply_markup=main_menu())
         os.remove(enhanced_name)
+    except Exception as e:
+        bot.send_message(chat_id, f"😢 Enhancement failed: {e}. Try again, love! 💕", reply_markup=main_menu())
+        print(f"Image enhancement failed for chat_id {chat_id}: {e}")
     os.remove(file_name)
     user_state[chat_id] = "MAIN_MENU"
     bot.send_message(chat_id, "🌸 Back to the menu, cutie! What's next? 😊", reply_markup=main_menu())
@@ -123,10 +115,12 @@ def enhance_image(message):
 def pdf_to_word(message):
     chat_id = message.chat.id
     user_last_interaction[chat_id] = time.time()
+    print(f"PDF to Word request from chat_id: {chat_id}")  # Debug log
     if message.document.file_name.lower().endswith('.pdf'):
         file_info = bot.get_file(message.document.file_id)
         if file_info.file_size > 20 * 1024 * 1024:
             bot.send_message(chat_id, "😅 PDF too big, sweetie! Keep it under 20 MB, okay? 💕", reply_markup=main_menu())
+            print(f"PDF too large for chat_id: {chat_id}, size: {file_info.file_size}")
             return
         downloaded = bot.download_file(file_info.file_path)
         pdf_path = "temp.pdf"
@@ -144,15 +138,18 @@ def pdf_to_word(message):
             bot.send_message(chat_id, "🌟 Here's your Word doc, darling! What's next? 😘", reply_markup=main_menu())
         except Exception as e:
             bot.send_message(chat_id, f"😢 Oops, something went wrong: {e}. Try another PDF, love! 💖", reply_markup=main_menu())
+            print(f"PDF to Word failed for chat_id {chat_id}: {e}")
             os.remove(pdf_path)
     else:
         bot.send_message(chat_id, "😉 I need a PDF, cutie! Try again! 💕", reply_markup=main_menu())
+        print(f"Invalid file type for PDF to Word, chat_id: {chat_id}")
     user_state[chat_id] = "MAIN_MENU"
 
 @bot.message_handler(content_types=['document'], func=lambda m: user_state.get(m.chat.id) == "WORD_TO_PDF")
 def word_to_pdf(message):
     chat_id = message.chat.id
     user_last_interaction[chat_id] = time.time()
+    print(f"Word to PDF request from chat_id: {chat_id}")  # Debug log
     if message.document.file_name.lower().endswith('.docx'):
         file_info = bot.get_file(message.document.file_id)
         downloaded = bot.download_file(file_info.file_path)
@@ -169,15 +166,18 @@ def word_to_pdf(message):
             bot.send_message(chat_id, "🌟 Here's your PDF, sweetie! What's next? 😍", reply_markup=main_menu())
         except Exception as e:
             bot.send_message(chat_id, f"😢 Oops, something went wrong: {e}. Try another Word doc, love! 💖", reply_markup=main_menu())
+            print(f"Word to PDF failed for chat_id {chat_id}: {e}")
             os.remove(docx_path)
     else:
         bot.send_message(chat_id, "😉 I need a .docx file, darling! Try again! 💕", reply_markup=main_menu())
+        print(f"Invalid file type for Word to PDF, chat_id: {chat_id}")
     user_state[chat_id] = "MAIN_MENU"
 
 @bot.message_handler(content_types=['document'], func=lambda m: user_state.get(m.chat.id) == "SIGN_PDF")
 def sign_pdf(message):
     chat_id = message.chat.id
     user_last_interaction[chat_id] = time.time()
+    print(f"Sign PDF request from chat_id: {chat_id}")  # Debug log
     if message.document.file_name.lower().endswith('.pdf'):
         file_info = bot.get_file(message.document.file_id)
         downloaded = bot.download_file(file_info.file_path)
@@ -205,15 +205,18 @@ def sign_pdf(message):
             bot.send_message(chat_id, "✍️ Signed your PDF, love! What's next? 😘", reply_markup=main_menu())
         except Exception as e:
             bot.send_message(chat_id, f"😢 Oops, something went wrong: {e}. Try another PDF, cutie! 💖", reply_markup=main_menu())
+            print(f"Sign PDF failed for chat_id {chat_id}: {e}")
             os.remove(pdf_path)
     else:
         bot.send_message(chat_id, "😉 I need a PDF, sweetie! Try again! 💕", reply_markup=main_menu())
+        print(f"Invalid file type for Sign PDF, chat_id: {chat_id}")
     user_state[chat_id] = "MAIN_MENU"
 
 @bot.message_handler(content_types=['photo'], func=lambda m: user_state.get(m.chat.id) == "JPG_TO_PDF")
 def jpg_to_pdf(message):
     chat_id = message.chat.id
     user_last_interaction[chat_id] = time.time()
+    print(f"JPG to PDF image upload from chat_id: {chat_id}")  # Debug log
     if chat_id not in user_images:
         user_images[chat_id] = []
     file_info = bot.get_file(message.photo[-1].file_id)
@@ -228,8 +231,10 @@ def jpg_to_pdf(message):
 def create_pdf_from_images(message):
     chat_id = message.chat.id
     user_last_interaction[chat_id] = time.time()
+    print(f"JPG to PDF 'Done' request from chat_id: {chat_id}")  # Debug log
     if chat_id not in user_images or not user_images[chat_id]:
         bot.send_message(chat_id, "😅 No images yet, darling! Send some JPGs first! 💕", reply_markup=main_menu())
+        print(f"No images for JPG to PDF, chat_id: {chat_id}")
         user_state[chat_id] = "MAIN_MENU"
         return
     pdf_path = f"output_{chat_id}.pdf"
@@ -245,6 +250,7 @@ def create_pdf_from_images(message):
             c.showPage()
         except Exception as e:
             bot.send_message(chat_id, f"😢 Error with an image: {e}. Skipping it, love! 💖")
+            print(f"JPG to PDF image processing failed for chat_id {chat_id}: {e}")
         os.remove(img_path)
     c.save()
     with open(pdf_path, 'rb') as f:
@@ -256,12 +262,18 @@ def create_pdf_from_images(message):
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    update = telebot.types.Update.de_json(request.get_json())
-    bot.process_new_updates([update])
-    return '', 200
+    try:
+        update = telebot.types.Update.de_json(request.get_json())
+        print(f"Webhook received update: {update}")  # Debug log
+        bot.process_new_updates([update])
+        return '', 200
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return '', 500
 
 if __name__ == '__main__':
     bot.remove_webhook()
     time.sleep(1)
     bot.set_webhook(url=webhook_url)
+    print(f"Setting webhook to {webhook_url}")  # Debug log
     app.run(host='0.0.0.0', port=5000)
