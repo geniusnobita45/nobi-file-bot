@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-bot = telebot.TeleBot("8201009198:AAGhsiDkPtAxcLmw1gIvbz7gnX9mFAeQudk")
+bot = telebot.TeleBot("8247281321:AAG7A-D9HFa93-As9eITy8JNotCgYbSC0DM")
 user_state = {}
 user_last_interaction = {}
 user_images = {}
